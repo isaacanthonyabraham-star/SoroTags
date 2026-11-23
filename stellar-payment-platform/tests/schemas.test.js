@@ -28,6 +28,13 @@ describe('request schemas', () => {
       expect(registerBodySchema.safeParse(valid).success).toBe(true);
     });
 
+    test.each(['admin', 'root', 'support', 'api', 'Admin'])(
+      'rejects reserved username %s',
+      (username) => {
+        expect(registerBodySchema.safeParse({ ...valid, username }).success).toBe(false);
+      },
+    );
+
     test.each([3, 20])('accepts a %i character username', (length) => {
       expect(registerBodySchema.safeParse({ ...valid, username: 'a'.repeat(length) }).success).toBe(true);
     });
@@ -331,4 +338,3 @@ describe('request schemas', () => {
     });
   });
 });
-

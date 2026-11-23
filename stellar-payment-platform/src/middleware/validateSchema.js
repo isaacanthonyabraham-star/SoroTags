@@ -1,6 +1,7 @@
 'use strict';
 
 const { errorBody } = require('../errors');
+const { RESERVED_USERNAME_MESSAGE } = require('../schemas/userSchemas');
 
 // An invalid body is a well-formed request carrying unprocessable content, so
 // it answers 422 with VALIDATION_FAILED. A malformed query string is a bad
@@ -37,6 +38,22 @@ function validateSchema({ body, query } = {}) {
       const result = schema.safeParse(req[key] ?? {});
 
       if (!result.success) {
+        const isReservedUsernameError =
+          key === 'body' &&
+          result.error.issues.some(
+            (issue) =>
+              issue.code === 'custom' &&
+              issue.path[0] === 'username' &&
+              issue.message === RESERVED_USERNAME_MESSAGE,
+          );
+        if (isReservedUsernameError) {
+          return res.status(403).json(
+            errorBody('FORBIDDEN', RESERVED_USERNAME_MESSAGE, {
+              correlationId: req.correlationId,
+            }),
+          );
+        }
+
         return res.status(status).json(
           errorBody(code, `Invalid request ${key}`, {
             details: formatIssues(result.error.issues),

@@ -3,6 +3,23 @@
 const { z } = require('zod');
 const { sanitized, clampedInt, paginationFields, cursorField, optionalLookupString } = require('./common');
 
+const RESERVED_USERNAMES = [
+  'admin',
+  'root',
+  'support',
+  'system',
+  'stellar',
+  'api',
+  'help',
+  'superuser',
+  'administrator',
+];
+const RESERVED_USERNAME_MESSAGE = 'This username is reserved.';
+
+const isReservedUsername = (username) =>
+  typeof username === 'string' &&
+  RESERVED_USERNAMES.includes(username.trim().split('*', 1)[0].toLowerCase());
+
 /**
  * POST /register body.
  *
@@ -18,7 +35,8 @@ const registerBodySchema = z
       .trim()
       .min(3, 'username must be between 3 and 20 characters')
       .max(20, 'username must be between 3 and 20 characters')
-      .regex(/^[a-zA-Z0-9]+$/, 'username must contain only letters and numbers'),
+      .regex(/^[a-zA-Z0-9]+$/, 'username must contain only letters and numbers')
+      .transform((username) => username.toLowerCase()),
     // Only required to be a non-empty string: StrKey in the handler is the
     // authoritative format check and answers 400 with a Stellar-specific
     // message. Adding a length bound here would reject payloads before they
@@ -37,7 +55,11 @@ const registerBodySchema = z
     signature: z.string().trim().optional(),
     signerAddress: z.string().trim().optional(),
   })
-  .loose();
+  .loose()
+  .refine((value) => !isReservedUsername(value.username), {
+    error: RESERVED_USERNAME_MESSAGE,
+    path: ['username'],
+  });
 
 /** GET /federation query. */
 const federationQuerySchema = z
@@ -138,4 +160,16 @@ const verifyEmailConfirmBodySchema = verifyEmailBodySchema.extend({
     .regex(/^\d{6}$/, 'code must be a 6-digit number'),
 });
 
-module.exports = { registerBodySchema, federationQuerySchema, lookupQuerySchema, usersQuerySchema, accountPaymentsQuerySchema, activityQuerySchema, verifyEmailBodySchema, verifyEmailConfirmBodySchema };
+module.exports = {
+  registerBodySchema,
+  federationQuerySchema,
+  lookupQuerySchema,
+  usersQuerySchema,
+  accountPaymentsQuerySchema,
+  activityQuerySchema,
+  verifyEmailBodySchema,
+  verifyEmailConfirmBodySchema,
+  RESERVED_USERNAMES,
+  RESERVED_USERNAME_MESSAGE,
+  isReservedUsername,
+};

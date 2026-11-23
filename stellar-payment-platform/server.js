@@ -43,6 +43,7 @@ const { apiVersion } = require("./src/middleware/apiVersion");
 const { deprecationMiddleware } = require("./src/middleware/deprecation");
 const {
   registerBodySchema,
+  isReservedUsername,
   federationQuerySchema,
   lookupQuerySchema,
   usersQuerySchema,
@@ -70,7 +71,6 @@ const {
 const {
   normalizeNameTag,
   validateMemo,
-  RESERVED_NAMES,
   MAX_USERNAMES_PER_ADDRESS,
   PRIMARY_USERNAME_ORDER,
   USER_DATABASE,
@@ -372,16 +372,6 @@ app.use(compression({ threshold: 1024 }));
 scheduleCleanupJob(prisma);
 scheduleSoftDeletePurgeJob(prisma);
 const poolMonitor = schedulePoolMonitoring(prisma);
-
-const RESERVED_USERNAMES = [
-  "admin",
-  "root",
-  "stellar",
-  "system",
-  "superuser",
-  "administrator",
-  "support",
-];
 
 // ---------------------------------------------------------------------------
 // #51 — ETag Caching Middleware for Federation Endpoint
@@ -804,6 +794,12 @@ app.post(
   ipLimiter,
   idempotencyMiddleware(redisClient),
   requireJson,
+  (req, _res, next) => {
+    if (isReservedUsername(req.body?.username)) {
+      return next(new ApiError("FORBIDDEN", "This username is reserved."));
+    }
+    return next();
+  },
   validateSchema({ body: registerBodySchema }),
   async (req, res, next) => {
     // registerBodySchema has already guaranteed that username is a trimmed
@@ -852,31 +848,6 @@ app.post(
     }
 
     const normalizedUsername = username.toLowerCase();
-
-    const normalizedLocalPart = normalizedUsername.includes("*")
-      ? normalizedUsername.split("*")[0]
-      : normalizedUsername;
-    if (RESERVED_USERNAMES.includes(normalizedLocalPart)) {
-      return res.status(403).json({ error: "Username is reserved." });
-    }
-
-    const RESERVED_NAMES = [
-      "admin",
-      "root",
-      "support",
-      "system",
-      "stellar",
-      "api",
-      "help",
-    ];
-    if (RESERVED_NAMES.includes(normalizedUsername)) {
-      return next(
-        new ApiError(
-          "FORBIDDEN",
-          "This username is reserved and cannot be registered.",
-        ),
-      );
-    }
 
     try {
       // #613 — an address may carry several usernames (aliases). Registration
